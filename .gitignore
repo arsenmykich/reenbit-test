@@ -19,6 +19,11 @@ bld/
 [Ll]og/
 [Ll]ogs/
 
+# Secrets and sensitive configuration files
+appsettings.secrets.json
+appsettings.Development.json
+appsettings.Production.json
+
 # Visual Studio 2015/2017 cache/options directory
 .vs/
 
