@@ -9,6 +9,12 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add configuration sources including environment variables for Azure
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -40,8 +46,12 @@ builder.Services.AddDbContext<ChatAppDbContext>(options =>
 });
 
 // Add SignalR with Azure SignalR Service
+var azureSignalRConnectionString = builder.Configuration["AzureSignalR__ConnectionString"];
+Console.WriteLine($"Azure SignalR Connection String: {(!string.IsNullOrEmpty(azureSignalRConnectionString) ? "Found" : "Not Found")}");
+
 builder.Services.AddSignalR()
-    .AddAzureSignalR(builder.Configuration.GetConnectionString("AzureSignalR"));
+    .AddAzureSignalR(azureSignalRConnectionString);
+
 
 // Add Sentiment Analysis Service
 builder.Services.AddScoped<ISentimentAnalysisService, SentimentAnalysisService>();
