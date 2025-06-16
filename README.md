@@ -96,21 +96,6 @@ ChatApp/
    
    The React app will be available at: `http://localhost:3000`
 
-4. **Database Configuration**
-   
-   The database connection string in `ChatApp.API/appsettings.json`:
-   ```json
-   {
-     "ConnectionStrings": {
-       "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=ChatAppDb;Trusted_Connection=true;MultipleActiveResultSets=true"
-     },
-     "Jwt": {
-       "Key": "this-is-a-very-strong-secret-key-with-at-least-32-characters-for-hmacsha256",
-       "Issuer": "ChatApp.API",
-       "Audience": "ChatApp.API.Users"
-     }
-   }
-   ```
 
 ## 🔐 Authentication
 
