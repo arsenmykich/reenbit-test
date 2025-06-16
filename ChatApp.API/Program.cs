@@ -45,12 +45,21 @@ builder.Services.AddDbContext<ChatAppDbContext>(options =>
     }
 });
 
-// Add SignalR with Azure SignalR Service
+// Add SignalR with Azure SignalR Service (fallback to local SignalR if no connection string)
 var azureSignalRConnectionString = builder.Configuration["AzureSignalR__ConnectionString"];
 Console.WriteLine($"Azure SignalR Connection String: {(!string.IsNullOrEmpty(azureSignalRConnectionString) ? "Found" : "Not Found")}");
 
-builder.Services.AddSignalR()
-    .AddAzureSignalR(azureSignalRConnectionString);
+if (!string.IsNullOrEmpty(azureSignalRConnectionString))
+{
+    Console.WriteLine("Using Azure SignalR Service");
+    builder.Services.AddSignalR()
+        .AddAzureSignalR(azureSignalRConnectionString);
+}
+else
+{
+    Console.WriteLine("Using Local SignalR (Azure SignalR connection string not provided)");
+    builder.Services.AddSignalR();
+}
 
 
 // Add Sentiment Analysis Service
