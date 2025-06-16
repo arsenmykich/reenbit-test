@@ -36,6 +36,7 @@ namespace ChatApp.API.Hubs
                 
                 if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
                 {
+                    Console.WriteLine("[ChatHub] User not authenticated");
                     await Clients.Caller.SendAsync("Error", "User not authenticated");
                     return;
                 }
@@ -46,6 +47,7 @@ namespace ChatApp.API.Hubs
                 var sender = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
                 if (sender == null)
                 {
+                    Console.WriteLine("[ChatHub] User not found in database");
                     await Clients.Caller.SendAsync("Error", "User not found");
                     return;
                 }
@@ -68,69 +70,121 @@ namespace ChatApp.API.Hubs
                     SentimentLabel = sentimentLabel
                 };
 
-                // Save message to database
+                // Save message to database FIRST
                 Console.WriteLine($"[ChatHub] Saving message to database");
                 _context.Messages.Add(messageEntity);
                 await _context.SaveChangesAsync();
-                Console.WriteLine($"[ChatHub] Message saved successfully");
+                Console.WriteLine($"[ChatHub] Message saved successfully with ID: {messageEntity.Id}");
 
-                // Send message to all clients in the room
-                Console.WriteLine($"[ChatHub] Broadcasting message to room: {roomId}");
+                // Prepare message data for broadcasting
                 var messageData = new
                 {
-                    User = sender.Username,
-                    Message = message,
-                    Timestamp = messageEntity.Timestamp,
-                    SentimentScore = sentimentScore,
-                    SentimentLabel = sentimentLabel,
-                    MessageId = messageEntity.Id,
-                    SenderId = sender.Id
+                    messageId = messageEntity.Id.ToString(),
+                    message = message,
+                    content = message,
+                    user = sender.Username,
+                    username = sender.Username,
+                    senderId = sender.Id.ToString(),
+                    timestamp = messageEntity.Timestamp.ToString("o"), // ISO format
+                    sentimentScore = sentimentScore,
+                    sentimentLabel = sentimentLabel,
+                    roomId = roomId
                 };
-                Console.WriteLine($"[ChatHub] Broadcasting data: {System.Text.Json.JsonSerializer.Serialize(messageData)}");
-                await Clients.Group(roomId).SendAsync("ReceiveMessage", messageData);
-                Console.WriteLine($"[ChatHub] Message broadcast completed");
+                
+                Console.WriteLine($"[ChatHub] Broadcasting message data: {System.Text.Json.JsonSerializer.Serialize(messageData)}");
+
+                // IMMEDIATELY broadcast to ALL clients - no groups, no delays
+                await Clients.All.SendAsync("ReceiveMessage", messageData);
+                Console.WriteLine("[ChatHub] ✅ Message broadcasted to ALL clients via Clients.All");
+
+                // Send confirmation to caller
+                await Clients.Caller.SendAsync("MessageSent", new { success = true, messageId = messageEntity.Id });
+                Console.WriteLine("[ChatHub] ✅ Confirmation sent to caller");
+                
             }
             catch (Exception ex)
             {
-                // Log detailed error information
-                Console.WriteLine($"[ChatHub] ERROR: {ex.Message}");
+                Console.WriteLine($"[ChatHub] ❌ ERROR in SendMessage: {ex.Message}");
                 Console.WriteLine($"[ChatHub] STACK TRACE: {ex.StackTrace}");
-                Console.WriteLine($"[ChatHub] INNER EXCEPTION: {ex.InnerException?.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"[ChatHub] INNER EXCEPTION: {ex.InnerException.Message}");
+                }
                 
-                // Send error message to client
+                // Send error to caller
                 await Clients.Caller.SendAsync("Error", $"Failed to send message: {ex.Message}");
-                
-                // Re-throw to ensure the client gets the "Failed to invoke" error
-                throw;
             }
         }
 
         public async Task JoinRoom(string roomId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
-            await Clients.Group(roomId).SendAsync("UserJoined", $"{Context.ConnectionId} joined {roomId}");
+            try
+            {
+                Console.WriteLine($"[ChatHub] User {Context.ConnectionId} joining room {roomId}");
+                await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
+                await Clients.All.SendAsync("UserJoined", $"User joined {roomId}");
+                Console.WriteLine($"[ChatHub] User successfully joined room {roomId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatHub] Error joining room: {ex.Message}");
+            }
         }
 
         public async Task LeaveRoom(string roomId)
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
-            await Clients.Group(roomId).SendAsync("UserLeft", $"{Context.ConnectionId} left {roomId}");
+            try
+            {
+                Console.WriteLine($"[ChatHub] User {Context.ConnectionId} leaving room {roomId}");
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
+                await Clients.All.SendAsync("UserLeft", $"User left {roomId}");
+                Console.WriteLine($"[ChatHub] User successfully left room {roomId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatHub] Error leaving room: {ex.Message}");
+            }
         }
 
         public override async Task OnConnectedAsync()
         {
             Console.WriteLine($"[ChatHub] User connected: {Context.ConnectionId}");
-            // Join default room
-            await Groups.AddToGroupAsync(Context.ConnectionId, "general");
-            Console.WriteLine($"[ChatHub] Added {Context.ConnectionId} to group 'general'");
-            await Clients.Group("general").SendAsync("UserConnected", $"User {Context.ConnectionId} connected");
-            Console.WriteLine($"[ChatHub] Sent UserConnected event to group 'general'");
+            
+            try
+            {
+                var usernameClaim = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
+                
+                // Send connection notification to all clients
+                await Clients.All.SendAsync("UserConnected", $"User {usernameClaim} connected");
+                Console.WriteLine($"[ChatHub] UserConnected notification sent");
+                
+                // Send current connection status to the new user
+                await Clients.Caller.SendAsync("Connected", new { connectionId = Context.ConnectionId, username = usernameClaim });
+                Console.WriteLine($"[ChatHub] Connection confirmation sent to caller");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatHub] Error in OnConnectedAsync: {ex.Message}");
+            }
+            
             await base.OnConnectedAsync();
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            await Clients.Group("general").SendAsync("UserDisconnected", $"User {Context.ConnectionId} disconnected");
+            Console.WriteLine($"[ChatHub] User disconnected: {Context.ConnectionId}");
+            
+            try
+            {
+                var usernameClaim = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
+                await Clients.All.SendAsync("UserDisconnected", $"User {usernameClaim} disconnected");
+                Console.WriteLine($"[ChatHub] UserDisconnected notification sent");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ChatHub] Error in OnDisconnectedAsync: {ex.Message}");
+            }
+            
             await base.OnDisconnectedAsync(exception);
         }
     }

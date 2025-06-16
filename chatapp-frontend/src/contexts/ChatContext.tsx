@@ -21,15 +21,15 @@ interface ChatProviderProps {
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
-  const { isAuthenticated, token } = useAuth();
+  const { isAuthenticated, token, user } = useAuth();
 
   useEffect(() => {
     if (isAuthenticated && token) {
-      console.log('User authenticated, connecting to chat...');
+      console.log('[ChatContext] User authenticated, connecting to chat...');
       connectToChat();
       loadMessages();
     } else {
-      console.log('User not authenticated, disconnecting...');
+      console.log('[ChatContext] User not authenticated, disconnecting...');
       disconnectFromChat();
     }
 
@@ -40,56 +40,94 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
   const connectToChat = async (): Promise<void> => {
     try {
-      console.log('Starting SignalR connection...');
+      console.log('[ChatContext] Starting SignalR connection...');
       setConnectionStatus('connecting');
       
       await signalRService.startConnection();
       
       // Set up event listeners
       signalRService.onReceiveMessage((messageData: any) => {
-        console.log('Received message:', messageData);
-        const newMessage: Message = {
-          id: messageData.messageId || messageData.MessageId || Date.now().toString(),
-          content: messageData.message || messageData.Message || messageData.content || messageData.Content,
-          timestamp: messageData.timestamp || messageData.Timestamp || new Date().toISOString(),
-          sentimentScore: messageData.sentimentScore || messageData.SentimentScore,
-          sentimentLabel: messageData.sentimentLabel || messageData.SentimentLabel || 'neutral',
-          sender: {
-            id: messageData.senderId || messageData.SenderId || '',
-            username: messageData.user || messageData.User || 'Unknown'
-          }
-        };
+        console.log('🔥 [ChatContext] *** RECEIVED SIGNALR MESSAGE ***');
+        console.log('[ChatContext] Raw messageData:', JSON.stringify(messageData, null, 2));
         
-        setMessages(prev => [...prev, newMessage]);
+        try {
+          const newMessage: Message = {
+            id: messageData.messageId || messageData.MessageId || `temp-${Date.now()}`,
+            content: messageData.message || messageData.Message || messageData.content || messageData.Content || '',
+            timestamp: messageData.timestamp || messageData.Timestamp || new Date().toISOString(),
+            sentimentScore: Number(messageData.sentimentScore || messageData.SentimentScore || 0.5),
+            sentimentLabel: messageData.sentimentLabel || messageData.SentimentLabel || 'neutral',
+            sender: {
+              id: messageData.senderId || messageData.SenderId || '',
+              username: messageData.user || messageData.User || messageData.username || 'Unknown'
+            }
+          };
+          
+          console.log('📝 [ChatContext] Processed message:', JSON.stringify(newMessage, null, 2));
+          console.log(`📊 [ChatContext] Current messages count BEFORE adding: ${messages.length}`);
+          
+          setMessages(prev => {
+            console.log(`📊 [ChatContext] Current messages in setter: ${prev.length}`);
+            
+            // Check if message already exists to avoid duplicates
+            const exists = prev.some(msg => {
+              const sameId = msg.id === newMessage.id;
+              const sameContent = msg.content === newMessage.content && 
+                                 msg.sender.username === newMessage.sender.username;
+              const timeClose = Math.abs(new Date(msg.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 5000;
+              
+              console.log(`🔍 [ChatContext] Checking duplicate - ID: ${sameId}, Content: ${sameContent}, Time: ${timeClose}`);
+              
+              return sameId || (sameContent && timeClose);
+            });
+            
+            if (exists) {
+              console.log('❌ [ChatContext] Message already exists, skipping duplicate');
+              return prev;
+            }
+            
+            console.log('✅ [ChatContext] Adding new message to state');
+            const newMessages = [...prev, newMessage];
+            console.log(`📊 [ChatContext] New messages count: ${newMessages.length}`);
+            return newMessages;
+          });
+        } catch (error) {
+          console.error('❌ [ChatContext] Error processing received message:', error);
+        }
       });
 
       signalRService.onError((error: string) => {
-        console.error('Chat error:', error);
+        console.error('[ChatContext] Chat error:', error);
         setConnectionStatus('disconnected');
       });
 
       signalRService.onUserConnected((message: string) => {
-        console.log('User connected:', message);
+        console.log('[ChatContext] User connected:', message);
       });
 
       signalRService.onUserDisconnected((message: string) => {
-        console.log('User disconnected:', message);
+        console.log('[ChatContext] User disconnected:', message);
+      });
+
+      // Set up MessageSent confirmation handler
+      signalRService.onMessageSent((data: any) => {
+        console.log('[ChatContext] Message sent confirmation:', data);
       });
 
       // Join default room
-      console.log('Joining general room...');
+      console.log('[ChatContext] Joining general room...');
       await signalRService.joinRoom('general');
       
       setConnectionStatus('connected');
-      console.log('Successfully connected to chat');
+      console.log('[ChatContext] Successfully connected to chat');
     } catch (error) {
-      console.error('Failed to connect to chat:', error);
+      console.error('[ChatContext] Failed to connect to chat:', error);
       setConnectionStatus('disconnected');
     }
   };
 
   const disconnectFromChat = async (): Promise<void> => {
-    console.log('Disconnecting from chat...');
+    console.log('[ChatContext] Disconnecting from chat...');
     await signalRService.stopConnection();
     setConnectionStatus('disconnected');
     setMessages([]);
@@ -97,27 +135,48 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
 
   const loadMessages = async (): Promise<void> => {
     try {
-      console.log('Loading messages...');
+      console.log('[ChatContext] Loading messages from API...');
       const loadedMessages = await messageService.getMessages(1, 50);
-      console.log('Loaded messages:', loadedMessages.length);
-      setMessages(loadedMessages.reverse());
+      console.log(`[ChatContext] Loaded ${loadedMessages.length} messages from API`);
+      
+      // Sort messages by timestamp (oldest first)
+      const sortedMessages = loadedMessages.sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      
+      setMessages(sortedMessages);
     } catch (error) {
-      console.error('Failed to load messages:', error);
+      console.error('[ChatContext] Failed to load messages:', error);
     }
   };
 
   const sendMessage = async (content: string): Promise<void> => {
     try {
-      console.log('Sending message:', content);
-      if (connectionStatus === 'connected') {
-        await signalRService.sendMessage(content, 'general');
-        console.log('Message sent successfully');
-      } else {
+      console.log('[ChatContext] Sending message:', content);
+      
+      if (connectionStatus !== 'connected') {
         throw new Error('Not connected to chat');
       }
+
+      // Send via SignalR - this will save to DB and broadcast
+      await signalRService.sendMessage(content, 'general');
+      console.log('[ChatContext] Message sent successfully via SignalR');
+      
     } catch (error) {
-      console.error('Failed to send message:', error);
-      throw error;
+      console.error('[ChatContext] Failed to send message:', error);
+      
+      // If SignalR fails, try to fallback to direct API call
+      try {
+        console.log('[ChatContext] Attempting fallback to API...');
+        await messageService.sendMessage({ content });
+        console.log('[ChatContext] Message sent via API fallback');
+        
+        // Reload messages to show the new one
+        setTimeout(() => loadMessages(), 1000);
+      } catch (apiError) {
+        console.error('[ChatContext] API fallback also failed:', apiError);
+        throw error; // Throw the original SignalR error
+      }
     }
   };
 
@@ -125,7 +184,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     try {
       await signalRService.joinRoom(roomId);
     } catch (error) {
-      console.error('Failed to join room:', error);
+      console.error('[ChatContext] Failed to join room:', error);
       throw error;
     }
   };
@@ -134,7 +193,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     try {
       await signalRService.leaveRoom(roomId);
     } catch (error) {
-      console.error('Failed to leave room:', error);
+      console.error('[ChatContext] Failed to leave room:', error);
       throw error;
     }
   };

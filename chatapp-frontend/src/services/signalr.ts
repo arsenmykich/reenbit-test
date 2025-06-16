@@ -3,6 +3,7 @@ import * as signalR from '@microsoft/signalr';
 export class SignalRService {
   private connection: signalR.HubConnection | null = null;
   private token: string | null = null;
+  private joinedRooms: Set<string> = new Set();
 
   constructor() {
     this.token = localStorage.getItem('authToken');
@@ -14,7 +15,7 @@ export class SignalRService {
     }
 
     this.token = localStorage.getItem('authToken');
-
+      
     this.connection = new signalR.HubConnectionBuilder()
       .withUrl('http://localhost:5281/chathub', {
         accessTokenFactory: () => {
@@ -31,6 +32,9 @@ export class SignalRService {
     try {
       await this.connection.start();
       console.log('SignalR connected successfully');
+      
+      // Automatically join the general room
+      await this.joinRoom('general');
     } catch (error) {
       console.error('SignalR connection failed:', error);
       throw error;
@@ -41,13 +45,33 @@ export class SignalRService {
     if (this.connection) {
       await this.connection.stop();
       this.connection = null;
+      this.joinedRooms.clear();
       console.log('SignalR disconnected');
     }
   }
 
   public onReceiveMessage(callback: (message: any) => void): void {
     if (this.connection) {
-      this.connection.on('ReceiveMessage', callback);
+      console.log('🔧 [SignalR] Setting up ReceiveMessage listener');
+      this.connection.on('ReceiveMessage', (message: any) => {
+        console.log('🚀 [SignalR] *** RECEIVED MESSAGE EVENT ***');
+        console.log('[SignalR] Raw message from hub:', JSON.stringify(message, null, 2));
+        console.log('[SignalR] Message type:', typeof message);
+        console.log('[SignalR] Message keys:', Object.keys(message || {}));
+        
+        callback(message);
+      });
+    } else {
+      console.error('❌ [SignalR] Cannot set up ReceiveMessage listener - no connection');
+    }
+  }
+
+  public onMessageSent(callback: (data: any) => void): void {
+    if (this.connection) {
+      this.connection.on('MessageSent', (data: any) => {
+        console.log('SignalR onMessageSent triggered with:', data);
+        callback(data);
+      });
     }
   }
 
@@ -70,22 +94,48 @@ export class SignalRService {
   }
 
   public async sendMessage(message: string, roomId: string = 'general'): Promise<void> {
+    console.log('📤 [SignalR] *** SENDING MESSAGE ***');
+    console.log(`[SignalR] Message: "${message}", Room: "${roomId}"`);
+    console.log(`[SignalR] Connection state: ${this.connection?.state}`);
+    
     if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
+      // Ensure we're in the room before sending
+      if (!this.joinedRooms.has(roomId)) {
+        console.log(`[SignalR] Not in room ${roomId}, joining first...`);
+        await this.joinRoom(roomId);
+      }
+      
+      console.log(`[SignalR] Invoking SendMessage on hub...`);
       await this.connection.invoke('SendMessage', message, roomId);
+      console.log(`✅ [SignalR] Message sent successfully`);
     } else {
-      throw new Error('SignalR connection not established');
+      const error = 'SignalR connection not established';
+      console.error(`❌ [SignalR] ${error}`);
+      throw new Error(error);
     }
   }
 
   public async joinRoom(roomId: string): Promise<void> {
     if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
-      await this.connection.invoke('JoinRoom', roomId);
+      try {
+        await this.connection.invoke('JoinRoom', roomId);
+        this.joinedRooms.add(roomId);
+        console.log(`Joined room: ${roomId}`);
+      } catch (error) {
+        console.error(`Failed to join room ${roomId}:`, error);
+      }
     }
   }
 
   public async leaveRoom(roomId: string): Promise<void> {
     if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
-      await this.connection.invoke('LeaveRoom', roomId);
+      try {
+        await this.connection.invoke('LeaveRoom', roomId);
+        this.joinedRooms.delete(roomId);
+        console.log(`Left room: ${roomId}`);
+      } catch (error) {
+        console.error(`Failed to leave room ${roomId}:`, error);
+      }
     }
   }
 
