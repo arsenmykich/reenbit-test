@@ -9,17 +9,48 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add configuration sources including environment variables for Azure
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
 // Add services to the container
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add Entity Framework
-builder.Services.AddDbContext<ChatAppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// Add Entity Framework with PostgreSQL (Neon DB)
+var databaseProvider = builder.Configuration["DatabaseProvider"] ?? "SqlServer";
+Console.WriteLine($"Database Provider: {databaseProvider}");
+Console.WriteLine($"Connection String: {builder.Configuration.GetConnectionString("DefaultConnection")}");
 
-// Add SignalR
-builder.Services.AddSignalR();
+builder.Services.AddDbContext<ChatAppDbContext>(options =>
+{
+    switch (databaseProvider.ToLower())
+    {
+        case "sqlite":
+            Console.WriteLine("Using SQLite");
+            options.UseSqlite(builder.Configuration.GetConnectionString("SQLiteConnection"));
+            break;
+        case "postgresql":
+            Console.WriteLine("Using PostgreSQL (Neon DB)");
+            options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"));
+            break;
+        case "sqlserver":
+        default:
+            Console.WriteLine("Using SQL Server");
+            options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+            break;
+    }
+});
+
+// Add SignalR with Azure SignalR Service
+var azureSignalRConnectionString = builder.Configuration["AzureSignalR__ConnectionString"];
+Console.WriteLine($"Azure SignalR Connection String: {(!string.IsNullOrEmpty(azureSignalRConnectionString) ? "Found" : "Not Found")}");
+
+builder.Services.AddSignalR()
+    .AddAzureSignalR(azureSignalRConnectionString);
 
 // Add Sentiment Analysis Service
 builder.Services.AddScoped<ISentimentAnalysisService, SentimentAnalysisService>();
