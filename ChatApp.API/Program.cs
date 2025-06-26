@@ -45,6 +45,9 @@ builder.Services.AddDbContext<ChatAppDbContext>(options =>
     }
 });
 
+// Register UnitOfWork
+builder.Services.AddScoped<ChatApp.Infrastructure.Repositories.IUnitOfWork, ChatApp.Infrastructure.Repositories.UnitOfWork>();
+
 // Add SignalR with Azure SignalR Service (fallback to local SignalR if no connection string)
 var azureSignalRConnectionString = builder.Configuration["AzureSignalR__ConnectionString"];
 Console.WriteLine($"Azure SignalR Connection String: {(!string.IsNullOrEmpty(azureSignalRConnectionString) ? "Found" : "Not Found")}");
@@ -67,6 +70,9 @@ builder.Services.AddScoped<ISentimentAnalysisService, SentimentAnalysisService>(
 
 // Add Authentication Service
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Add MessageService
+builder.Services.AddScoped<ChatApp.Infrastructure.Services.IMessageService, ChatApp.Infrastructure.Services.MessageService>();
 
 // Add JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
