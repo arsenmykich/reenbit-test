@@ -147,6 +147,32 @@ export class SignalRService {
     this.token = token;
     localStorage.setItem('authToken', token);
   }
+
+  public onReceivePrivateMessage(callback: (message: any) => void): void {
+    if (this.connection) {
+      this.connection.on('ReceivePrivateMessage', (message: any) => {
+        console.log('🚀 [SignalR] *** RECEIVED PRIVATE MESSAGE EVENT ***');
+        callback(message);
+      });
+    }
+  }
+
+  public async sendPrivateMessage(message: string, recipientId: string): Promise<void> {
+    if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
+      await this.connection.invoke('SendPrivateMessage', message, recipientId);
+    } else {
+      throw new Error('SignalR connection not established');
+    }
+  }
+
+  public onPrivateMessageSent(callback: (data: any) => void): void {
+    if (this.connection) {
+      this.connection.on('PrivateMessageSent', (data: any) => {
+        console.log('SignalR onPrivateMessageSent triggered with:', data);
+        callback(data);
+      });
+    }
+  }
 }
 
 export const signalRService = new SignalRService(); 

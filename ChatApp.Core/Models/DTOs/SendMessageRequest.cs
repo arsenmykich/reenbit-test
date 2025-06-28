@@ -9,5 +9,7 @@ namespace ChatApp.Core.Models.DTOs
         public string Content { get; set; } = string.Empty;
         
         public Guid? ChatRoomId { get; set; }
+
+        public Guid? RecipientId { get; set; }
     }
 } 

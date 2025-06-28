@@ -11,5 +11,7 @@ namespace ChatApp.Core.Models
         public double? SentimentScore { get; set; }
         public string SentimentLabel { get; set; } = string.Empty;
         public virtual User Sender { get; set; } = null!;
+        public Guid? RecipientId { get; set; }
+        public virtual User? Recipient { get; set; }
     }
 } 

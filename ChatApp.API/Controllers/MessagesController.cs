@@ -96,5 +96,47 @@ namespace ChatApp.API.Controllers
                 return StatusCode(500, new { error = "Failed to send message", details = ex.Message });
             }
         }
+
+        [HttpGet("private/{otherUserId}")]
+        public async Task<IActionResult> GetPrivateMessages(Guid otherUserId, int page = 1, int pageSize = 50)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                    return Unauthorized(new { error = "Invalid user token" });
+
+                var messages = await _messageService.GetPrivateMessagesAsync(userId, otherUserId, page, pageSize);
+                return Ok(messages);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Failed to retrieve private messages", details = ex.Message });
+            }
+        }
+
+        [HttpPost("private")]
+        public async Task<IActionResult> SendPrivateMessage([FromBody] SendMessageRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                    return Unauthorized(new { error = "Invalid user token" });
+
+                if (request.RecipientId == null)
+                    return BadRequest(new { error = "RecipientId is required for private messages." });
+
+                var createdMessage = await _messageService.SendPrivateMessageAsync(request, userId);
+                return Created($"/api/messages/private", createdMessage);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Failed to send private message", details = ex.Message });
+            }
+        }
     }
 } 

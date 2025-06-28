@@ -36,8 +36,13 @@ namespace ChatApp.Infrastructure.Data
                 entity.Property(e => e.SentimentLabel).HasMaxLength(20);
                 
                 entity.HasOne(e => e.Sender)
-                      .WithMany()
+                      .WithMany(u => u.SentMessages)
                       .HasForeignKey(e => e.SenderId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Recipient)
+                      .WithMany(u => u.ReceivedMessages)
+                      .HasForeignKey(e => e.RecipientId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
 

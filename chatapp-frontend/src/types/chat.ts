@@ -8,11 +8,16 @@ export interface Message {
     id: string;
     username: string;
   };
+  recipient?: {
+    id: string;
+    username: string;
+  };
 }
 
 export interface SendMessageRequest {
   content: string;
   chatRoomId?: string;
+  recipientId?: string;
 }
 
 export interface ChatContextType {
