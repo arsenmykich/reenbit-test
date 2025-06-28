@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Microsoft.AspNetCore.SignalR;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -48,6 +50,9 @@ builder.Services.AddDbContext<ChatAppDbContext>(options =>
 // Register UnitOfWork
 builder.Services.AddScoped<ChatApp.Infrastructure.Repositories.IUnitOfWork, ChatApp.Infrastructure.Repositories.UnitOfWork>();
 
+// Add custom UserIdProvider for SignalR
+builder.Services.AddSingleton<IUserIdProvider, ChatApp.API.CustomUserIdProvider>();
+
 // Add SignalR with Azure SignalR Service (fallback to local SignalR if no connection string)
 var azureSignalRConnectionString = builder.Configuration["AzureSignalR__ConnectionString"];
 Console.WriteLine($"Azure SignalR Connection String: {(!string.IsNullOrEmpty(azureSignalRConnectionString) ? "Found" : "Not Found")}");
@@ -63,7 +68,6 @@ else
     Console.WriteLine("Using Local SignalR (Azure SignalR connection string not provided)");
     builder.Services.AddSignalR();
 }
-
 
 // Add Sentiment Analysis Service
 builder.Services.AddScoped<ISentimentAnalysisService, SentimentAnalysisService>();

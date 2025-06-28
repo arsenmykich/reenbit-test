@@ -94,5 +94,62 @@ namespace ChatApp.Infrastructure.Services
                 Sender = sender != null ? new { sender.Id, sender.Username } : null
             };
         }
+
+        public async Task<IEnumerable<object>> GetPrivateMessagesAsync(Guid userId, Guid otherUserId, int page, int pageSize)
+        {
+            var allMessages = await _unitOfWork.Messages.FindAsync(
+                m => (m.SenderId == userId && m.RecipientId == otherUserId) ||
+                     (m.SenderId == otherUserId && m.RecipientId == userId)
+            );
+            var messages = allMessages
+                .OrderByDescending(m => m.Timestamp)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            var users = (await _unitOfWork.Users.GetAllAsync()).ToDictionary(u => u.Id);
+            return messages.Select(m => new
+            {
+                m.Id,
+                m.Content,
+                m.Timestamp,
+                m.SentimentScore,
+                m.SentimentLabel,
+                Sender = users.TryGetValue(m.SenderId, out var sender) ? new { sender.Id, sender.Username } : null,
+                Recipient = m.RecipientId.HasValue && users.TryGetValue(m.RecipientId.Value, out var recipient) ? new { recipient.Id, recipient.Username } : null
+            });
+        }
+
+        public async Task<object> SendPrivateMessageAsync(SendMessageRequest request, Guid senderId)
+        {
+            if (request.RecipientId == null)
+                throw new ArgumentException("RecipientId is required for private messages.");
+
+            var sentimentResult = await _sentimentService.AnalyzeSentimentAsync(request.Content);
+            var message = new Message
+            {
+                Id = Guid.NewGuid(),
+                SenderId = senderId,
+                RecipientId = request.RecipientId,
+                Content = request.Content,
+                Timestamp = DateTime.UtcNow,
+                SentimentScore = sentimentResult.score,
+                SentimentLabel = sentimentResult.label
+            };
+            await _unitOfWork.Messages.AddAsync(message);
+            await _unitOfWork.SaveChangesAsync();
+
+            var users = (await _unitOfWork.Users.GetAllAsync()).ToDictionary(u => u.Id);
+            return new
+            {
+                message.Id,
+                message.Content,
+                message.Timestamp,
+                message.SentimentScore,
+                message.SentimentLabel,
+                Sender = users.TryGetValue(message.SenderId, out var sender) ? new { sender.Id, sender.Username } : null,
+                Recipient = message.RecipientId.HasValue && users.TryGetValue(message.RecipientId.Value, out var recipient) ? new { recipient.Id, recipient.Username } : null
+            };
+        }
     }
 } 

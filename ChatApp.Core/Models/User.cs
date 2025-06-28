@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace ChatApp.Core.Models
 {
@@ -10,5 +11,7 @@ namespace ChatApp.Core.Models
         public string PasswordHash { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public DateTime? LastLoginAt { get; set; }
+        public virtual ICollection<Message> SentMessages { get; set; } = new List<Message>();
+        public virtual ICollection<Message> ReceivedMessages { get; set; } = new List<Message>();
     }
 } 

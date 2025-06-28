@@ -1,6 +1,9 @@
 using ChatApp.Core.Models.DTOs;
 using ChatApp.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
+using ChatApp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ChatApp.API.Controllers
 {
@@ -9,10 +12,12 @@ namespace ChatApp.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly ChatAppDbContext _context;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, ChatAppDbContext context)
         {
             _authService = authService;
+            _context = context;
         }
 
         [HttpPost("register")]
@@ -63,6 +68,16 @@ namespace ChatApp.API.Controllers
             {
                 return StatusCode(500, new { error = "Login failed", details = ex.Message });
             }
+        }
+
+        [HttpGet("users")]
+        [Authorize]
+        public async Task<IActionResult> GetUsers()
+        {
+            var users = await _context.Users
+                .Select(u => new { u.Id, u.Username, u.Email })
+                .ToListAsync();
+            return Ok(users);
         }
     }
 } 
