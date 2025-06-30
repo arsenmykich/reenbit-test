@@ -26,10 +26,16 @@ interface PrivateChat {
   messages: Message[];
 }
 
-export interface ExtendedChatContextType extends ChatContextType {
+export interface ExtendedChatContextType {
+  messages: Message[];
+  connectionStatus: 'connected' | 'disconnected' | 'connecting';
+  sendMessage: (content: string) => Promise<void>;
   privateChats: Record<string, PrivateChat>;
   sendPrivateMessage: (content: string, recipientId: string) => Promise<void>;
   loadPrivateMessages: (otherUserId: string) => Promise<void>;
+  currentRoom: { id: string; name: string } | null;
+  joinRoom: (roomId: string, roomName: string) => Promise<void>;
+  leaveRoom: () => Promise<void>;
 }
 
 export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
@@ -37,12 +43,13 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
   const { isAuthenticated, token, user } = useAuth();
   const [privateChats, setPrivateChats] = useState<Record<string, PrivateChat>>({});
+  const [currentRoom, setCurrentRoom] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && token) {
       console.log('[ChatContext] User authenticated, connecting to chat...');
       connectToChat();
-      loadMessages();
+      loadMessages(); // Load general chat messages by default
     } else {
       console.log('[ChatContext] User not authenticated, disconnecting...');
       disconnectFromChat();
@@ -207,6 +214,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       // Join default room
       console.log('[ChatContext] Joining general room...');
       await signalRService.joinRoom('general');
+      setCurrentRoom({ id: 'general', name: 'General Chat' });
       
       setConnectionStatus('connected');
       console.log('[ChatContext] Successfully connected to chat');
@@ -223,10 +231,10 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     setMessages([]);
   };
 
-  const loadMessages = async (): Promise<void> => {
+  const loadMessages = async (roomId?: string): Promise<void> => {
     try {
-      console.log('[ChatContext] Loading messages from API...');
-      const loadedMessages = await messageService.getMessages(1, 50);
+      console.log(`[ChatContext] Loading messages from API for room: ${roomId || 'general'}...`);
+      const loadedMessages = await messageService.getMessages(1, 50, roomId);
       console.log(`[ChatContext] Loaded ${loadedMessages.length} messages from API`);
       
       // Sort messages by timestamp (oldest first)
@@ -249,7 +257,8 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
       }
 
       // Send via SignalR - this will save to DB and broadcast
-      await signalRService.sendMessage(content, 'general');
+      const roomId = currentRoom?.id || 'general';
+      await signalRService.sendMessage(content, roomId);
       console.log('[ChatContext] Message sent successfully via SignalR');
       
     } catch (error) {
@@ -262,7 +271,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
         console.log('[ChatContext] Message sent via API fallback');
         
         // Reload messages to show the new one
-        setTimeout(() => loadMessages(), 1000);
+        setTimeout(() => loadMessages(currentRoom?.id), 1000);
       } catch (apiError) {
         console.error('[ChatContext] API fallback also failed:', apiError);
         throw error; // Throw the original SignalR error
@@ -270,18 +279,25 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     }
   };
 
-  const joinRoom = async (roomId: string): Promise<void> => {
+  const joinRoom = async (roomId: string, roomName: string): Promise<void> => {
     try {
       await signalRService.joinRoom(roomId);
+      setCurrentRoom({ id: roomId, name: roomName });
+      // Load messages for the new room
+      await loadMessages(roomId === 'general' ? undefined : roomId);
+      console.log(`[ChatContext] Joined room: ${roomName} (${roomId})`);
     } catch (error) {
       console.error('[ChatContext] Failed to join room:', error);
       throw error;
     }
   };
 
-  const leaveRoom = async (roomId: string): Promise<void> => {
+  const leaveRoom = async (): Promise<void> => {
     try {
-      await signalRService.leaveRoom(roomId);
+      if (currentRoom) {
+        await signalRService.leaveRoom(currentRoom.id);
+        setCurrentRoom(null);
+      }
     } catch (error) {
       console.error('[ChatContext] Failed to leave room:', error);
       throw error;
@@ -357,10 +373,35 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
   const loadPrivateMessages = async (otherUserId: string): Promise<void> => {
     try {
       const loadedMessages = await messageService.getPrivateMessages(otherUserId, 1, 50);
+      
+      // Try to get username from loaded messages or fetch user info
+      let username = 'Unknown User';
+      if (loadedMessages.length > 0) {
+        // Find a message from the other user to get their username
+        const messageFromOtherUser = loadedMessages.find(msg => msg.sender.id === otherUserId);
+        if (messageFromOtherUser) {
+          username = messageFromOtherUser.sender.username;
+        }
+      }
+      
+      // If still unknown, try to get from all users
+      if (username === 'Unknown User') {
+        try {
+          const { userService } = await import('../services/api');
+          const allUsers = await userService.getAllUsers();
+          const userInfo = allUsers.find(u => u.id === otherUserId);
+          if (userInfo) {
+            username = userInfo.username;
+          }
+        } catch (error) {
+          console.error('[ChatContext] Failed to fetch user info:', error);
+        }
+      }
+      
       setPrivateChats(prev => ({
         ...prev,
         [otherUserId]: {
-          user: { id: otherUserId, username: '', email: '' },
+          user: { id: otherUserId, username, email: '' },
           messages: loadedMessages,
         },
       }));
@@ -380,6 +421,7 @@ export const ChatProvider: React.FC<ChatProviderProps> = ({ children }) => {
     privateChats,
     sendPrivateMessage,
     loadPrivateMessages,
+    currentRoom,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

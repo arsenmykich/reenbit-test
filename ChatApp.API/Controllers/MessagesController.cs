@@ -26,11 +26,11 @@ namespace ChatApp.API.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetMessages(int page = 1, int pageSize = 50)
+        public async Task<IActionResult> GetMessages(int page = 1, int pageSize = 50, string? roomId = null)
         {
             try
             {
-                var messages = await _messageService.GetMessagesAsync(page, pageSize);
+                var messages = await _messageService.GetMessagesAsync(page, pageSize, roomId);
                 return Ok(messages);
             }
             catch (Exception ex)
@@ -136,6 +136,20 @@ namespace ChatApp.API.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { error = "Failed to send private message", details = ex.Message });
+            }
+        }
+
+        [HttpGet("room/{roomId}")]
+        public async Task<IActionResult> GetRoomMessages(string roomId, int page = 1, int pageSize = 50)
+        {
+            try
+            {
+                var messages = await _messageService.GetMessagesAsync(page, pageSize, roomId);
+                return Ok(messages);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Failed to retrieve room messages", details = ex.Message });
             }
         }
     }

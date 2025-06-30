@@ -1,57 +1,154 @@
 import React, { useState, useEffect } from 'react';
+import styled from 'styled-components';
 import { useChat } from '../../contexts/ChatContext';
-import { User } from '../../types/auth';
+import { useAuth } from '../../contexts/AuthContext';
+import { 
+  ChatArea, 
+  ChatHeader, 
+  MessagesContainer, 
+  MessageInput, 
+  InputGroup, 
+  Input, 
+  Button, 
+  MessageBubble 
+} from '../styled/StyledComponents';
+
+const PrivateChatContainer = styled(ChatArea)`
+  height: 100%;
+`;
+
+const HeaderContent = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const HeaderTitle = styled.h2`
+  margin: 0;
+  font-size: 18px;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const BackButton = styled(Button)`
+  padding: 8px 16px;
+  font-size: 14px;
+`;
+
+const UserStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 14px;
+`;
+
+const StatusIndicator = styled.div<{ online?: boolean }>`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: ${props => props.online ? '#10b981' : '#ef4444'};
+`;
+
+const NoMessagesText = styled.div`
+  text-align: center;
+  color: #6b7280;
+  padding: 40px 20px;
+  font-size: 16px;
+`;
 
 interface PrivateChatProps {
-  user: User;
-  onClose: () => void;
+  recipientId: string;
+  onBack: () => void;
 }
 
-const PrivateChat: React.FC<PrivateChatProps> = ({ user, onClose }) => {
+const PrivateChat: React.FC<PrivateChatProps> = ({ recipientId, onBack }) => {
   const { privateChats, sendPrivateMessage, loadPrivateMessages } = useChat();
+  const { user: currentUser } = useAuth();
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    loadPrivateMessages(user.id);
+    loadPrivateMessages(recipientId);
     // eslint-disable-next-line
-  }, [user.id]);
+  }, [recipientId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
-    await sendPrivateMessage(message, user.id);
+    await sendPrivateMessage(message, recipientId);
     setMessage('');
   };
 
-  const messages = privateChats[user.id]?.messages || [];
+  const messages = privateChats[recipientId]?.messages || [];
+  const chatUser = privateChats[recipientId]?.user;
 
   return (
-    <div style={{ background: '#fff', borderRadius: 8, padding: 16, boxShadow: '0 2px 8px #0001', width: 400, maxWidth: '100%', position: 'fixed', right: 32, bottom: 32, zIndex: 100 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>Chat with {user.username}</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
-      </div>
-      <div style={{ maxHeight: 300, overflowY: 'auto', margin: '16px 0', background: '#f9f9f9', borderRadius: 6, padding: 8 }}>
-        {messages.length === 0 && <div style={{ color: '#888' }}>No messages yet</div>}
-        {messages.map((msg, idx) => (
-          <div key={msg.id + idx} style={{ marginBottom: 8, textAlign: msg.sender.id === user.id ? 'left' : 'right' }}>
-            <div style={{ display: 'inline-block', background: msg.sender.id === user.id ? '#e0e7ff' : '#c7f9cc', borderRadius: 8, padding: '6px 12px', maxWidth: 250 }}>
-              <b>{msg.sender.username}:</b> {msg.content}
-            </div>
-            <div style={{ fontSize: 10, color: '#888' }}>{new Date(msg.timestamp).toLocaleTimeString()}</div>
+    <PrivateChatContainer>
+      <ChatHeader>
+        <HeaderContent>
+          <HeaderTitle>
+            💬 Private Chat with {chatUser?.username || 'Unknown User'}
+          </HeaderTitle>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <UserStatus>
+              <StatusIndicator online={true} />
+              Online
+            </UserStatus>
+            <BackButton variant="secondary" onClick={onBack}>
+              ← Back to Lobby
+            </BackButton>
           </div>
-        ))}
-      </div>
-      <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          placeholder="Type a private message..."
-          style={{ flex: 1, borderRadius: 6, border: '1px solid #ccc', padding: 8 }}
-        />
-        <button type="submit" style={{ background: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, padding: '0 16px', cursor: 'pointer' }}>Send</button>
-      </form>
-    </div>
+        </HeaderContent>
+      </ChatHeader>
+
+      <MessagesContainer>
+        {messages.length === 0 ? (
+          <NoMessagesText>
+            No messages yet. Start the conversation!
+          </NoMessagesText>
+        ) : (
+          messages.map((msg, idx) => {
+            // Check ownership by both ID and username for reliability
+            const isOwnById = msg.sender.id === currentUser?.id;
+            const isOwnByUsername = msg.sender.username === currentUser?.username;
+            const isOwn = isOwnById || isOwnByUsername;
+            
+            return (
+              <MessageBubble 
+                key={msg.id + idx} 
+                isOwn={isOwn}
+              >
+                <div className="message-content">
+                  {msg.content}
+                </div>
+                <div className="message-meta">
+                  <span>{msg.sender.username}</span>
+                  <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </MessageBubble>
+            );
+          })
+        )}
+      </MessagesContainer>
+
+      <MessageInput>
+        <form onSubmit={handleSend} style={{ width: '100%' }}>
+          <InputGroup>
+            <Input
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              placeholder={`Send a private message to ${chatUser?.username || 'user'}...`}
+              autoFocus
+            />
+            <Button type="submit" disabled={!message.trim()}>
+              Send
+            </Button>
+          </InputGroup>
+        </form>
+      </MessageInput>
+    </PrivateChatContainer>
   );
 };
 

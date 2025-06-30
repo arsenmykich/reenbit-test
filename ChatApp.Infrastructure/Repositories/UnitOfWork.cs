@@ -7,9 +7,9 @@ namespace ChatApp.Infrastructure.Repositories
     public class UnitOfWork : IUnitOfWork
     {
         private readonly ChatAppDbContext _context;
-        private Repository<Message> _messages;
-        private Repository<User> _users;
-        private Repository<ChatRoom> _chatRooms;
+        private IRepository<Message>? _messages;
+        private IRepository<User>? _users;
+        private IRepository<ChatRoom>? _chatRooms;
 
         public UnitOfWork(ChatAppDbContext context)
         {
@@ -20,9 +20,9 @@ namespace ChatApp.Infrastructure.Repositories
         public IRepository<User> Users => _users ??= new Repository<User>(_context);
         public IRepository<ChatRoom> ChatRooms => _chatRooms ??= new Repository<ChatRoom>(_context);
 
-        public async Task<int> SaveChangesAsync()
+        public async Task SaveChangesAsync()
         {
-            return await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
         }
 
         public void Dispose()

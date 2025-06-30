@@ -19,14 +19,36 @@ namespace ChatApp.Infrastructure.Services
             _sentimentService = sentimentService;
         }
 
-        public async Task<IEnumerable<object>> GetMessagesAsync(int page, int pageSize)
+        public async Task<IEnumerable<object>> GetMessagesAsync(int page, int pageSize, string? roomId = null)
         {
-            var allMessages = await _unitOfWork.Messages.GetAllAsync();
-            var messagesWithSender = allMessages
+            var query = _unitOfWork.Messages.GetAllAsync().Result.AsQueryable();
+            
+            // Filter by room if specified
+            if (!string.IsNullOrEmpty(roomId))
+            {
+                if (roomId == "general")
+                {
+                    // For "general" room, get messages without ChatRoomId (legacy messages) or with null ChatRoomId
+                    query = query.Where(m => m.ChatRoomId == null && m.RecipientId == null);
+                }
+                else if (Guid.TryParse(roomId, out var roomGuid))
+                {
+                    // For specific room
+                    query = query.Where(m => m.ChatRoomId == roomGuid);
+                }
+            }
+            else
+            {
+                // Default: only public messages (no RecipientId and no specific room)
+                query = query.Where(m => m.RecipientId == null && m.ChatRoomId == null);
+            }
+
+            var messagesWithSender = query
                 .OrderByDescending(m => m.Timestamp)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
+                
             var users = (await _unitOfWork.Users.GetAllAsync()).ToDictionary(u => u.Id);
             return messagesWithSender.Select(m => new
             {
@@ -35,6 +57,7 @@ namespace ChatApp.Infrastructure.Services
                 m.Timestamp,
                 m.SentimentScore,
                 m.SentimentLabel,
+                m.ChatRoomId,
                 Sender = users.TryGetValue(m.SenderId, out var sender) ? new { sender.Id, sender.Username } : null
             });
         }
@@ -76,6 +99,7 @@ namespace ChatApp.Infrastructure.Services
             {
                 Id = Guid.NewGuid(),
                 SenderId = userId,
+                ChatRoomId = request.ChatRoomId,
                 Content = request.Content,
                 Timestamp = DateTime.UtcNow,
                 SentimentScore = sentimentResult.score,
@@ -91,6 +115,7 @@ namespace ChatApp.Infrastructure.Services
                 message.Timestamp,
                 message.SentimentScore,
                 message.SentimentLabel,
+                message.ChatRoomId,
                 Sender = sender != null ? new { sender.Id, sender.Username } : null
             };
         }

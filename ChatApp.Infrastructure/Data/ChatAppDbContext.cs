@@ -12,6 +12,7 @@ namespace ChatApp.Infrastructure.Data
         public DbSet<User> Users { get; set; }
         public DbSet<Message> Messages { get; set; }
         public DbSet<ChatRoom> ChatRooms { get; set; }
+        public DbSet<ChatRoomParticipant> ChatRoomParticipants { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -44,6 +45,12 @@ namespace ChatApp.Infrastructure.Data
                       .WithMany(u => u.ReceivedMessages)
                       .HasForeignKey(e => e.RecipientId)
                       .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.ChatRoom)
+                      .WithMany(r => r.Messages)
+                      .HasForeignKey(e => e.ChatRoomId)
+                      .OnDelete(DeleteBehavior.SetNull)
+                      .IsRequired(false);
             });
 
             // ChatRoom configuration
@@ -58,9 +65,24 @@ namespace ChatApp.Infrastructure.Data
                       .HasForeignKey(e => e.CreatedById)
                       .OnDelete(DeleteBehavior.Restrict);
 
-                entity.HasMany(e => e.Messages)
-                      .WithOne()
-                      .HasForeignKey("ChatRoomId")
+                entity.HasMany(e => e.Participants)
+                      .WithMany()
+                      .UsingEntity<ChatRoomParticipant>();
+            });
+
+            // ChatRoomParticipant configuration
+            modelBuilder.Entity<ChatRoomParticipant>(entity =>
+            {
+                entity.HasKey(e => new { e.ChatRoomId, e.UserId });
+                
+                entity.HasOne(e => e.ChatRoom)
+                      .WithMany()
+                      .HasForeignKey(e => e.ChatRoomId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.User)
+                      .WithMany()
+                      .HasForeignKey(e => e.UserId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
         }

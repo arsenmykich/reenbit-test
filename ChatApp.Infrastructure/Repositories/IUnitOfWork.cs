@@ -9,6 +9,6 @@ namespace ChatApp.Infrastructure.Repositories
         IRepository<Message> Messages { get; }
         IRepository<User> Users { get; }
         IRepository<ChatRoom> ChatRooms { get; }
-        Task<int> SaveChangesAsync();
+        Task SaveChangesAsync();
     }
 } 

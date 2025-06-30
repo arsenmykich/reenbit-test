@@ -1,19 +1,19 @@
 import styled from 'styled-components';
 
 export const Container = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
 `;
 
 export const Card = styled.div`
   background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
 `;
 
 export const AuthCard = styled(Card)`
@@ -22,37 +22,44 @@ export const AuthCard = styled(Card)`
 `;
 
 export const ChatContainer = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 24px;
-  height: calc(100vh - 40px);
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+    flex-direction: column;
   }
 `;
 
 export const ChatArea = styled(Card)`
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - 42px);
+  flex: 1;
   padding: 0;
+  margin: 0;
   overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
 `;
 
 export const ChatHeader = styled.div`
-  padding: 20px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid #e5e7eb;
   background: #f9fafb;
-  border-radius: 16px 16px 0 0;
+  border-radius: 0;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 `;
 
 export const MessagesContainer = styled.div`
   flex: 1;
-  padding: 20px 24px;
+  padding: 15px 20px;
   overflow-y: auto;
   background: white;
+  min-height: 0;
   
   &::-webkit-scrollbar {
     width: 6px;
@@ -69,10 +76,12 @@ export const MessagesContainer = styled.div`
 `;
 
 export const MessageInput = styled.div`
-  padding: 20px 24px;
+  padding: 12px 20px;
   border-top: 1px solid #e5e7eb;
   background: #f9fafb;
-  border-radius: 0 0 16px 16px;
+  border-radius: 0;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
 `;
 
 export const InputGroup = styled.div`
@@ -157,25 +166,28 @@ export const Label = styled.label`
 `;
 
 export const MessageBubble = styled.div<{ isOwn?: boolean; sentiment?: string }>`
-  max-width: 70%;
-  margin-bottom: 16px;
+  max-width: 75%;
+  margin-bottom: 12px;
   margin-left: ${props => props.isOwn ? 'auto' : '0'};
   margin-right: ${props => props.isOwn ? '0' : 'auto'};
   
   .message-content {
-    padding: 12px 16px;
-    border-radius: 18px;
-    background: ${props => props.isOwn ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f3f4f6'};
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: ${props => props.isOwn 
+      ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+      : '#f3f4f6'};
     color: ${props => props.isOwn ? 'white' : '#374151'};
     word-wrap: break-word;
+    font-size: 14px;
   }
   
   .message-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 4px;
-    font-size: 12px;
+    gap: 6px;
+    margin-top: 3px;
+    font-size: 11px;
     color: #6b7280;
     justify-content: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
   }
