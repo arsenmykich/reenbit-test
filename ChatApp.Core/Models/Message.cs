@@ -13,5 +13,7 @@ namespace ChatApp.Core.Models
         public virtual User Sender { get; set; } = null!;
         public Guid? RecipientId { get; set; }
         public virtual User? Recipient { get; set; }
+        public Guid? ChatRoomId { get; set; }
+        public virtual ChatRoom? ChatRoom { get; set; }
     }
 } 

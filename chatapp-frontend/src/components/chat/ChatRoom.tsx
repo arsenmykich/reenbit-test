@@ -3,8 +3,6 @@ import { Send } from 'lucide-react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  Container,
-  ChatContainer,
   ChatArea,
   ChatHeader,
   MessagesContainer,
@@ -12,8 +10,6 @@ import {
   InputGroup,
   Input,
   Button,
-  Sidebar,
-  UserInfo,
   ConnectionStatus,
   MessageBubble,
   SentimentBadge
@@ -25,7 +21,7 @@ export const ChatRoom: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { user, logout } = useAuth();
-  const { messages, connectionStatus, sendMessage } = useChat();
+  const { messages, connectionStatus, sendMessage, currentRoom } = useChat();
 
   useEffect(() => {
     scrollToBottom();
@@ -68,89 +64,64 @@ export const ChatRoom: React.FC = () => {
   };
 
   return (
-    <Container>
-      <ChatContainer>
-        <ChatArea>
-          <ChatHeader>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h2 style={{ margin: 0, color: '#374151' }}>General Chat</h2>
-                <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
-                  Real-time chat with sentiment analysis
-                </p>
+    <ChatArea>
+      <ChatHeader>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0, color: '#374151' }}>
+              {currentRoom?.name || 'General Chat'}
+            </h2>
+            <p style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
+              {currentRoom?.id === 'general' 
+                ? 'Main chat room for general discussions' 
+                : 'Real-time chat with sentiment analysis'}
+            </p>
+          </div>
+          <ConnectionStatus status={connectionStatus}>
+            {getStatusText(connectionStatus)}
+          </ConnectionStatus>
+        </div>
+      </ChatHeader>
+
+      <MessagesContainer>
+        {messages.map((message) => {
+          const isOwn = message.sender.username === user?.username;
+          return (
+            <MessageBubble key={message.id} isOwn={isOwn}>
+              <div className="message-content">
+                {message.content}
               </div>
-              <ConnectionStatus status={connectionStatus}>
-                {getStatusText(connectionStatus)}
-              </ConnectionStatus>
-            </div>
-          </ChatHeader>
+              <div className="message-meta">
+                <span>{isOwn ? 'You' : message.sender.username}</span>
+                <span>{formatTimestamp(message.timestamp)}</span>
+                <SentimentBadge sentiment={message.sentimentLabel}>
+                  {message.sentimentLabel}
+                </SentimentBadge>
+              </div>
+            </MessageBubble>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </MessagesContainer>
 
-          <MessagesContainer>
-            {messages.map((message) => {
-              const isOwn = message.sender.username === user?.username;
-              return (
-                <MessageBubble key={message.id} isOwn={isOwn}>
-                  <div className="message-content">
-                    {message.content}
-                  </div>
-                  <div className="message-meta">
-                    <span>{isOwn ? 'You' : message.sender.username}</span>
-                    <span>{formatTimestamp(message.timestamp)}</span>
-                    <SentimentBadge sentiment={message.sentimentLabel}>
-                      {message.sentimentLabel}
-                    </SentimentBadge>
-                  </div>
-                </MessageBubble>
-              );
-            })}
-            <div ref={messagesEndRef} />
-          </MessagesContainer>
-
-          <MessageInput>
-            <form onSubmit={handleSendMessage}>
-              <InputGroup>
-                <Input
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  placeholder="Type your message..."
-                  disabled={connectionStatus !== 'connected' || sending}
-                />
-                <Button
-                  type="submit"
-                  disabled={!messageText.trim() || connectionStatus !== 'connected' || sending}
-                >
-                  <Send size={16} />
-                </Button>
-              </InputGroup>
-            </form>
-          </MessageInput>
-        </ChatArea>
-
-        <Sidebar>
-          <UserInfo>
-            <h3>{user?.username}</h3>
-            <p>{user?.email}</p>
-          </UserInfo>
-          
-          <div style={{ textAlign: 'center' }}>
-            <Button variant="danger" onClick={logout} style={{ width: '100%' }}>
-              Logout
+      <MessageInput>
+        <form onSubmit={handleSendMessage}>
+          <InputGroup>
+            <Input
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="Type your message..."
+              disabled={connectionStatus !== 'connected' || sending}
+            />
+            <Button
+              type="submit"
+              disabled={!messageText.trim() || connectionStatus !== 'connected' || sending}
+            >
+              <Send size={16} />
             </Button>
-          </div>
-          
-          <div style={{ marginTop: '20px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#374151', fontSize: '14px' }}>
-              Chat Features
-            </h4>
-            <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: '12px', color: '#6b7280' }}>
-              <li>Real-time messaging</li>
-              <li>Sentiment analysis</li>
-              <li>Message history</li>
-              <li>User authentication</li>
-            </ul>
-          </div>
-        </Sidebar>
-      </ChatContainer>
-    </Container>
+          </InputGroup>
+        </form>
+      </MessageInput>
+    </ChatArea>
   );
 }; 

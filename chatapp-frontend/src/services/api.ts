@@ -47,9 +47,13 @@ export const authService = {
 };
 
 export const messageService = {
-  async getMessages(page: number = 1, pageSize: number = 50): Promise<Message[]> {
+  async getMessages(page: number = 1, pageSize: number = 50, roomId?: string): Promise<Message[]> {
+    const params: any = { page, pageSize };
+    if (roomId) {
+      params.roomId = roomId;
+    }
     const response: AxiosResponse<Message[]> = await api.get('/api/messages', {
-      params: { page, pageSize },
+      params,
     });
     return response.data;
   },
@@ -81,6 +85,77 @@ export const userService = {
   async getAllUsers(): Promise<User[]> {
     const response: AxiosResponse<User[]> = await api.get('/api/auth/users');
     return response.data;
+  },
+};
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  description: string;
+  isPrivate: boolean;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    username: string;
+  };
+  memberCount: number;
+}
+
+export interface CreateChatRoomRequest {
+  name: string;
+  description: string;
+  isPrivate: boolean;
+}
+
+export interface ChatRoomParticipant {
+  userId: string;
+  username: string;
+  email: string;
+  joinedAt: string;
+  isAdmin: boolean;
+}
+
+export interface AddParticipantRequest {
+  userId: string;
+  isAdmin: boolean;
+}
+
+export const chatRoomService = {
+  async getChatRooms(): Promise<ChatRoom[]> {
+    const response: AxiosResponse<ChatRoom[]> = await api.get('/api/chatrooms');
+    return response.data;
+  },
+
+  async getChatRoom(id: string): Promise<ChatRoom> {
+    const response: AxiosResponse<ChatRoom> = await api.get(`/api/chatrooms/${id}`);
+    return response.data;
+  },
+
+  async createChatRoom(request: CreateChatRoomRequest): Promise<ChatRoom> {
+    const response: AxiosResponse<ChatRoom> = await api.post('/api/chatrooms', request);
+    return response.data;
+  },
+
+  async deleteChatRoom(id: string): Promise<void> {
+    await api.delete(`/api/chatrooms/${id}`);
+  },
+
+  async getParticipants(roomId: string): Promise<ChatRoomParticipant[]> {
+    const response: AxiosResponse<ChatRoomParticipant[]> = await api.get(`/api/chatrooms/${roomId}/participants`);
+    return response.data;
+  },
+
+  async addParticipant(roomId: string, request: AddParticipantRequest): Promise<ChatRoomParticipant> {
+    const response: AxiosResponse<ChatRoomParticipant> = await api.post(`/api/chatrooms/${roomId}/participants`, request);
+    return response.data;
+  },
+
+  async removeParticipant(roomId: string, userId: string): Promise<void> {
+    await api.delete(`/api/chatrooms/${roomId}/participants/${userId}`);
+  },
+
+  async joinRoom(roomId: string): Promise<void> {
+    await api.post(`/api/chatrooms/${roomId}/join`);
   },
 };
 

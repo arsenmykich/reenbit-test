@@ -93,18 +93,12 @@ export class SignalRService {
     }
   }
 
-  public async sendMessage(message: string, roomId: string = 'general'): Promise<void> {
+  public async sendMessage(message: string, roomId?: string): Promise<void> {
     console.log('📤 [SignalR] *** SENDING MESSAGE ***');
-    console.log(`[SignalR] Message: "${message}", Room: "${roomId}"`);
+    console.log(`[SignalR] Message: "${message}", Room: "${roomId || 'general'}"`);
     console.log(`[SignalR] Connection state: ${this.connection?.state}`);
     
     if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
-      // Ensure we're in the room before sending
-      if (!this.joinedRooms.has(roomId)) {
-        console.log(`[SignalR] Not in room ${roomId}, joining first...`);
-        await this.joinRoom(roomId);
-      }
-      
       console.log(`[SignalR] Invoking SendMessage on hub...`);
       await this.connection.invoke('SendMessage', message, roomId);
       console.log(`✅ [SignalR] Message sent successfully`);
@@ -116,26 +110,32 @@ export class SignalRService {
   }
 
   public async joinRoom(roomId: string): Promise<void> {
-    if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
-      try {
-        await this.connection.invoke('JoinRoom', roomId);
-        this.joinedRooms.add(roomId);
-        console.log(`Joined room: ${roomId}`);
-      } catch (error) {
-        console.error(`Failed to join room ${roomId}:`, error);
-      }
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      throw new Error('SignalR connection not established');
+    }
+    
+    try {
+      await this.connection.invoke('JoinRoom', roomId);
+      this.joinedRooms.add(roomId);
+      console.log(`[SignalR] Successfully joined room: ${roomId}`);
+    } catch (error) {
+      console.error('Failed to join room:', error);
+      throw error;
     }
   }
 
   public async leaveRoom(roomId: string): Promise<void> {
-    if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
-      try {
-        await this.connection.invoke('LeaveRoom', roomId);
-        this.joinedRooms.delete(roomId);
-        console.log(`Left room: ${roomId}`);
-      } catch (error) {
-        console.error(`Failed to leave room ${roomId}:`, error);
-      }
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      throw new Error('SignalR connection not established');
+    }
+    
+    try {
+      await this.connection.invoke('LeaveRoom', roomId);
+      this.joinedRooms.delete(roomId);
+      console.log(`[SignalR] Successfully left room: ${roomId}`);
+    } catch (error) {
+      console.error('Failed to leave room:', error);
+      throw error;
     }
   }
 
@@ -170,6 +170,24 @@ export class SignalRService {
       this.connection.on('PrivateMessageSent', (data: any) => {
         console.log('SignalR onPrivateMessageSent triggered with:', data);
         callback(data);
+      });
+    }
+  }
+
+  public onUserJoinedRoom(callback: (username: string, roomId: string) => void): void {
+    if (this.connection) {
+      this.connection.on('UserJoinedRoom', (username: string, roomId: string) => {
+        console.log(`[SignalR] User ${username} joined room ${roomId}`);
+        callback(username, roomId);
+      });
+    }
+  }
+
+  public onUserLeftRoom(callback: (username: string, roomId: string) => void): void {
+    if (this.connection) {
+      this.connection.on('UserLeftRoom', (username: string, roomId: string) => {
+        console.log(`[SignalR] User ${username} left room ${roomId}`);
+        callback(username, roomId);
       });
     }
   }

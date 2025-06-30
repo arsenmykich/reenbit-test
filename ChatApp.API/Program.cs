@@ -8,6 +8,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
+using BCrypt.Net;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -180,6 +181,78 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine("Admin user created:");
         Console.WriteLine("Email: admin@chatapp.com");
         Console.WriteLine("Password: Admin123!");
+    }
+}
+
+// Seed default chat rooms
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ChatAppDbContext>();
+    
+    // Check if we need to create default rooms
+    if (!context.ChatRooms.Any())
+    {
+        // Create a default admin user if not exists
+        var adminUser = context.Users.FirstOrDefault(u => u.Username == "admin");
+        if (adminUser == null)
+        {
+            adminUser = new User
+            {
+                Id = Guid.NewGuid(),
+                Username = "admin",
+                Email = "admin@chatapp.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
+                CreatedAt = DateTime.UtcNow
+            };
+            context.Users.Add(adminUser);
+            await context.SaveChangesAsync();
+        }
+
+        // Create default chat rooms
+        var defaultRooms = new[]
+        {
+            new ChatRoom
+            {
+                Id = Guid.NewGuid(),
+                Name = "Technology",
+                Description = "Discuss the latest in tech, programming, and innovation",
+                IsPrivate = false,
+                CreatedById = adminUser.Id,
+                CreatedAt = DateTime.UtcNow
+            },
+            new ChatRoom
+            {
+                Id = Guid.NewGuid(),
+                Name = "Random",
+                Description = "Random discussions about anything and everything",
+                IsPrivate = false,
+                CreatedById = adminUser.Id,
+                CreatedAt = DateTime.UtcNow
+            },
+            new ChatRoom
+            {
+                Id = Guid.NewGuid(),
+                Name = "Gaming",
+                Description = "Talk about your favorite games and gaming experiences",
+                IsPrivate = false,
+                CreatedById = adminUser.Id,
+                CreatedAt = DateTime.UtcNow
+            },
+            new ChatRoom
+            {
+                Id = Guid.NewGuid(),
+                Name = "Music",
+                Description = "Share and discuss music, artists, and concerts",
+                IsPrivate = false,
+                CreatedById = adminUser.Id,
+                CreatedAt = DateTime.UtcNow
+            }
+        };
+
+        context.ChatRooms.AddRange(defaultRooms);
+        await context.SaveChangesAsync();
+        
+        Console.WriteLine("✅ Default chat rooms created successfully!");
     }
 }
 

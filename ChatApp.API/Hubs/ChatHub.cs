@@ -1,11 +1,12 @@
-using ChatApp.Core.Models;
-using ChatApp.Infrastructure.Data;
-using ChatApp.Infrastructure.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using ChatApp.Infrastructure.Data;
+using ChatApp.Core.Models;
+using ChatApp.Core.Models.DTOs;
+using ChatApp.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using System;
-using System.Security.Claims;
 using System.Threading.Tasks;
 
 namespace ChatApp.API.Hubs
@@ -15,103 +16,41 @@ namespace ChatApp.API.Hubs
     {
         private readonly ChatAppDbContext _context;
         private readonly ISentimentAnalysisService _sentimentAnalysisService;
+        private readonly IMessageService _messageService;
 
-        public ChatHub(ChatAppDbContext context, ISentimentAnalysisService sentimentAnalysisService)
+        public ChatHub(ChatAppDbContext context, ISentimentAnalysisService sentimentAnalysisService, IMessageService messageService)
         {
             _context = context;
             _sentimentAnalysisService = sentimentAnalysisService;
+            _messageService = messageService;
         }
 
-        public async Task SendMessage(string message, string roomId = "general")
+        public async Task SendMessage(string message, string? roomId = null)
         {
-            Console.WriteLine($"[ChatHub] *** SENDMESSAGE METHOD CALLED ***");
-            Console.WriteLine($"[ChatHub] Parameters: message='{message}', roomId='{roomId}'");
-            Console.WriteLine($"[ChatHub] Context.ConnectionId: {Context.ConnectionId}");
-            
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+            {
+                await Clients.Caller.SendAsync("Error", "Authentication required");
+                return;
+            }
+
             try
             {
-                // Get authenticated user from JWT token
-                var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                var usernameClaim = Context.User?.FindFirst(ClaimTypes.Name)?.Value;
-                
-                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-                {
-                    Console.WriteLine("[ChatHub] User not authenticated");
-                    await Clients.Caller.SendAsync("Error", "User not authenticated");
-                    return;
-                }
-
-                Console.WriteLine($"[ChatHub] Authenticated user: {usernameClaim} (ID: {userId})");
-                
-                // Get user from database
-                var sender = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
-                if (sender == null)
-                {
-                    Console.WriteLine("[ChatHub] User not found in database");
-                    await Clients.Caller.SendAsync("Error", "User not found");
-                    return;
-                }
-
-                Console.WriteLine($"[ChatHub] Found user: {sender.Username}");
-
-                // Analyze sentiment
-                Console.WriteLine($"[ChatHub] Analyzing sentiment for message: {message}");
-                var (sentimentScore, sentimentLabel) = await _sentimentAnalysisService.AnalyzeSentimentAsync(message);
-                Console.WriteLine($"[ChatHub] Sentiment analysis result: {sentimentLabel} ({sentimentScore})");
-
-                // Create message entity
-                var messageEntity = new Message
-                {
-                    Id = Guid.NewGuid(),
-                    SenderId = sender.Id,
-                    Content = message,
-                    Timestamp = DateTime.UtcNow,
-                    SentimentScore = sentimentScore,
-                    SentimentLabel = sentimentLabel
-                };
-
-                // Save message to database FIRST
-                Console.WriteLine($"[ChatHub] Saving message to database");
-                _context.Messages.Add(messageEntity);
-                await _context.SaveChangesAsync();
-                Console.WriteLine($"[ChatHub] Message saved successfully with ID: {messageEntity.Id}");
-
-                // Prepare message data for broadcasting
-                var messageData = new
-                {
-                    messageId = messageEntity.Id.ToString(),
-                    message = message,
-                    content = message,
-                    user = sender.Username,
-                    username = sender.Username,
-                    senderId = sender.Id.ToString(),
-                    timestamp = messageEntity.Timestamp.ToString("o"), // ISO format
-                    sentimentScore = sentimentScore,
-                    sentimentLabel = sentimentLabel,
-                    roomId = roomId
+                var request = new SendMessageRequest 
+                { 
+                    Content = message, 
+                    ChatRoomId = string.IsNullOrEmpty(roomId) || roomId == "general" ? null : Guid.Parse(roomId)
                 };
                 
-                Console.WriteLine($"[ChatHub] Broadcasting message data: {System.Text.Json.JsonSerializer.Serialize(messageData)}");
-
-                // IMMEDIATELY broadcast to ALL clients - no groups, no delays
-                await Clients.All.SendAsync("ReceiveMessage", messageData);
-                Console.WriteLine("[ChatHub] ✅ Message broadcasted to ALL clients via Clients.All");
-
-                // Send confirmation to caller
-                await Clients.Caller.SendAsync("MessageSent", new { success = true, messageId = messageEntity.Id });
-                Console.WriteLine("[ChatHub] ✅ Confirmation sent to caller");
+                var result = await _messageService.SendMessageAsync(request, userId);
                 
+                // Determine which group to send to
+                var groupName = string.IsNullOrEmpty(roomId) || roomId == "general" ? "General" : $"Room_{roomId}";
+                
+                await Clients.Group(groupName).SendAsync("ReceiveMessage", result);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ChatHub] ❌ ERROR in SendMessage: {ex.Message}");
-                Console.WriteLine($"[ChatHub] STACK TRACE: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"[ChatHub] INNER EXCEPTION: {ex.InnerException.Message}");
-                }
-                
-                // Send error to caller
                 await Clients.Caller.SendAsync("Error", $"Failed to send message: {ex.Message}");
             }
         }
@@ -205,8 +144,8 @@ namespace ChatApp.API.Hubs
                 Console.WriteLine($"[ChatHub] Broadcasting private message data: {System.Text.Json.JsonSerializer.Serialize(messageData)}");
 
                 // Send to both sender and recipient using groups
-                await Clients.Group(userId.ToString()).SendAsync("ReceivePrivateMessage", messageData);
-                await Clients.Group(recipientGuid.ToString()).SendAsync("ReceivePrivateMessage", messageData);
+                await Clients.Group($"User_{userId}").SendAsync("ReceivePrivateMessage", messageData);
+                await Clients.Group($"User_{recipientGuid}").SendAsync("ReceivePrivateMessage", messageData);
                 Console.WriteLine("[ChatHub] ✅ Private message sent to both users");
 
                 // Send confirmation to caller
@@ -232,14 +171,55 @@ namespace ChatApp.API.Hubs
         {
             try
             {
-                Console.WriteLine($"[ChatHub] User {Context.ConnectionId} joining room {roomId}");
-                await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
-                await Clients.All.SendAsync("UserJoined", $"User joined {roomId}");
-                Console.WriteLine($"[ChatHub] User successfully joined room {roomId}");
+                var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                {
+                    await Clients.Caller.SendAsync("Error", "Authentication required");
+                    return;
+                }
+
+                // For general room, no permission check needed
+                if (roomId != "general")
+                {
+                    if (!Guid.TryParse(roomId, out var roomGuid))
+                    {
+                        await Clients.Caller.SendAsync("Error", "Invalid room ID");
+                        return;
+                    }
+
+                    // Check if room exists and if it's private
+                    var room = await _context.ChatRooms.FindAsync(roomGuid);
+                    if (room == null)
+                    {
+                        await Clients.Caller.SendAsync("Error", "Room not found");
+                        return;
+                    }
+
+                    // If room is private, check if user is a participant
+                    if (room.IsPrivate)
+                    {
+                        var isParticipant = await _context.ChatRoomParticipants
+                            .AnyAsync(p => p.ChatRoomId == roomGuid && p.UserId == userId);
+                        
+                        var isCreator = room.CreatedById == userId;
+
+                        if (!isParticipant && !isCreator)
+                        {
+                            await Clients.Caller.SendAsync("Error", "Access denied: You are not a member of this private room");
+                            return;
+                        }
+                    }
+                }
+
+                var groupName = roomId == "general" ? "General" : $"Room_{roomId}";
+                await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+                
+                var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+                await Clients.Group(groupName).SendAsync("UserJoinedRoom", username, roomId);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ChatHub] Error joining room: {ex.Message}");
+                await Clients.Caller.SendAsync("Error", $"Failed to join room: {ex.Message}");
             }
         }
 
@@ -247,73 +227,43 @@ namespace ChatApp.API.Hubs
         {
             try
             {
-                Console.WriteLine($"[ChatHub] User {Context.ConnectionId} leaving room {roomId}");
-                await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
-                await Clients.All.SendAsync("UserLeft", $"User left {roomId}");
-                Console.WriteLine($"[ChatHub] User successfully left room {roomId}");
+                var groupName = roomId == "general" ? "General" : $"Room_{roomId}";
+                await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+                
+                var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+                await Clients.Group(groupName).SendAsync("UserLeftRoom", username, roomId);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ChatHub] Error leaving room: {ex.Message}");
+                await Clients.Caller.SendAsync("Error", $"Failed to leave room: {ex.Message}");
             }
         }
 
         public override async Task OnConnectedAsync()
         {
-            Console.WriteLine($"[ChatHub] User connected: {Context.ConnectionId}");
-            
-            try
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
             {
-                var usernameClaim = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
-                var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                
                 // Add user to their personal group for private messages
-                if (!string.IsNullOrEmpty(userIdClaim))
-                {
-                    await Groups.AddToGroupAsync(Context.ConnectionId, userIdClaim);
-                    Console.WriteLine($"[ChatHub] User {userIdClaim} added to personal group");
-                }
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"User_{userId}");
                 
-                // Send connection notification to all clients
-                await Clients.All.SendAsync("UserConnected", $"User {usernameClaim} connected");
-                Console.WriteLine($"[ChatHub] UserConnected notification sent");
+                // Add user to General room by default
+                await Groups.AddToGroupAsync(Context.ConnectionId, "General");
                 
-                // Send current connection status to the new user
-                await Clients.Caller.SendAsync("Connected", new { connectionId = Context.ConnectionId, username = usernameClaim });
-                Console.WriteLine($"[ChatHub] Connection confirmation sent to caller");
+                var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+                await Clients.Others.SendAsync("UserConnected", username);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ChatHub] Error in OnConnectedAsync: {ex.Message}");
-            }
-            
             await base.OnConnectedAsync();
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
-            Console.WriteLine($"[ChatHub] User disconnected: {Context.ConnectionId}");
-            
-            try
+            var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (!string.IsNullOrEmpty(userIdClaim) && Guid.TryParse(userIdClaim, out var userId))
             {
-                var usernameClaim = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Anonymous";
-                var userIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                
-                // Remove user from their personal group
-                if (!string.IsNullOrEmpty(userIdClaim))
-                {
-                    await Groups.RemoveFromGroupAsync(Context.ConnectionId, userIdClaim);
-                    Console.WriteLine($"[ChatHub] User {userIdClaim} removed from personal group");
-                }
-                
-                await Clients.All.SendAsync("UserDisconnected", $"User {usernameClaim} disconnected");
-                Console.WriteLine($"[ChatHub] UserDisconnected notification sent");
+                var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Unknown";
+                await Clients.Others.SendAsync("UserDisconnected", username);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ChatHub] Error in OnDisconnectedAsync: {ex.Message}");
-            }
-            
             await base.OnDisconnectedAsync(exception);
         }
     }

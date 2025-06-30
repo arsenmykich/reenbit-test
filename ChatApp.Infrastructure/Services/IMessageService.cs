@@ -7,7 +7,7 @@ namespace ChatApp.Infrastructure.Services
 {
     public interface IMessageService
     {
-        Task<IEnumerable<object>> GetMessagesAsync(int page, int pageSize);
+        Task<IEnumerable<object>> GetMessagesAsync(int page, int pageSize, string? roomId = null);
         Task<object> GetMessageAsync(Guid id);
         Task<IEnumerable<object>> GetSentimentStatsAsync();
         Task<object> SendMessageAsync(SendMessageRequest request, Guid userId);
