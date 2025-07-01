@@ -1,6 +1,7 @@
 (feature/added-frontend is main branch)
 
 # Real-Time Chat Application with Authentication & Sentiment Analysis
+![image](https://github.com/user-attachments/assets/8e1475a5-1881-47d4-a7bd-2caac9fe5423)
 
 A modern, feature-rich real-time chat application built with ASP.NET Core, SignalR, React, and JWT authentication. Features automatic sentiment detection, multiple chat rooms, private messaging, user management, and a beautiful modern UI.
 
@@ -334,5 +335,31 @@ This project is actively maintained and regularly updated with new features. The
 
 **Last Updated**: December 2024
 **Version**: 2.0 - Major UI/UX overhaul with multiple chat rooms and private messaging
+
+## 🖼️ Screenshots
+
+### 1. Головний екран / Лобі
+![image](https://github.com/user-attachments/assets/8e1475a5-1881-47d4-a7bd-2caac9fe5423)
+
+### 2. Сторінка групового чату
+![image](https://github.com/user-attachments/assets/6c585a95-8a7c-4e0a-8bf9-137ba6e067f2)
+
+
+### 3. Приватний чат (Direct Message)
+![image](https://github.com/user-attachments/assets/3b1205ca-bf62-4739-aec3-fba1f6957902)
+
+
+### 4. Менеджер учасників кімнати
+![image](https://github.com/user-attachments/assets/1022f1e9-fb2f-4bdb-aa1e-87f0984c864c)
+
+
+### 5. Мобільна версія
+![image](https://github.com/user-attachments/assets/375a0be9-922d-4aac-9909-2fef8a7d0e66)
+
+
+### 6. Сторінка логіну/реєстрації
+![image](https://github.com/user-attachments/assets/15a84f2c-392b-420e-beaf-b95b5c5ce591)
+![image](https://github.com/user-attachments/assets/5397af0e-3037-408c-a311-401d443c2d85)
+
 
 
